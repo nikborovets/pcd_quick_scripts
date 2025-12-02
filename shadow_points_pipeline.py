@@ -169,7 +169,7 @@ def prepare_scans_for_pcl_multi_file(e57_files: List[str], output_dir: str = "sc
         pose_file: путь к файлу с pose данными
     """
     # Создаем директорию если не существует
-    Path(output_dir).mkdir(exist_ok=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     print(f"Обработка {len(e57_files)} E57 файлов")
     if downsample_voxel_size is not None:
@@ -254,7 +254,7 @@ def prepare_scans_for_pcl(e57_file: str, output_dir: str = "scans_for_pcl", down
         pose_file: путь к файлу с pose данными
     """
     # Создаем директорию если не существует
-    Path(output_dir).mkdir(exist_ok=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Получаем количество сканов
     e57 = pye57.E57(e57_file)
@@ -549,7 +549,7 @@ def main():
     nb_neighbors = 20  # Количество соседей для анализа
     std_ratio = 2.0  # Порог стандартного отклонения
 
-    output_dir = f"{file_name}_scans_for_pcl_{radius_search}_{threshold}_voxel_{downsample_voxel_size}_{save_mode}"  # Директория для промежуточных и итоговых файлов (можно сделать абсолютной)
+    output_dir = f"shadowpoints_output/{file_name}_scans_for_pcl_{radius_search}_{threshold}_voxel_{downsample_voxel_size}_{save_mode}"  # Директория для промежуточных и итоговых файлов (можно сделать абсолютной)
 
     final_output = f"{output_dir}/final_registered_scans_{save_mode}.ply"  # Итоговый объединенный файл
     final_output_local = f"{output_dir}/final_registered_scans_original.ply"  # Итоговый объединенный файл

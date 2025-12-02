@@ -16,3 +16,4 @@ data/
 *.e57
 *.ply
 *.json
+shadowpoints_output/
