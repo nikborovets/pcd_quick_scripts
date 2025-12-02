@@ -6,9 +6,13 @@ build/
 dist/
 wheels/
 *.egg-info
+.vscode/
+.cursor/
+.cache/
 
 # Virtual environments
 .venv
 data/
 *.e57
 *.ply
+*.json

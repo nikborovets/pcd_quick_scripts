@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+project(remove_shadowpoints)
+find_package(PCL 1.3 REQUIRED COMPONENTS common io features filters)
+add_executable(remove_shadowpoints remove_shadowpoints.cpp)
+target_link_libraries(remove_shadowpoints ${PCL_LIBRARIES})
