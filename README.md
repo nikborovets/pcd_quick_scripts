@@ -144,7 +144,8 @@ brew install pcl
 ### Сборка
 
 ```bash
-cd cpp_pcl_shadowpoints/build
+cd cpp_pcl_shadowpoints
+mkdir -p build && cd build
 cmake ..
 make
 ```
