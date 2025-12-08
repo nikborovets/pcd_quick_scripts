@@ -17,3 +17,7 @@ data/
 *.ply
 *.json
 shadowpoints_output/
+
+trajectory_*.txt
+*.pcd
+*.gif
