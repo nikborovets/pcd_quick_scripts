@@ -455,6 +455,54 @@ def register_processed_scans(processed_dir: str, pose_file: str, output_file: st
         print(f"Финальное количество точек: {len(pcd.points)}")
 
 
+def export_scans_to_e57(
+    processed_dir: str,
+    pose_file: str,
+    pattern: str,
+    output_file: str,
+) -> None:
+    """
+    Экспортирует локальные .ply сканы в один .e57, сохраняя pose (rotation, translation) для каждого скана.
+    """
+    pose_data = load_pose_data(pose_file)
+    processed_files = sorted(Path(processed_dir).glob(pattern))
+
+    if not processed_files:
+        raise FileNotFoundError(f"Не найдены файлы {pattern} в {processed_dir}")
+
+    if len(pose_data) != len(processed_files):
+        raise ValueError(f"Количество pose данных ({len(pose_data)}) не совпадает с количеством файлов ({len(processed_files)})")
+
+    print(f"Экспорт в E57: найдено {len(processed_files)} файлов по шаблону {pattern}")
+
+    with pye57.E57(output_file, mode="w") as e57_out:
+        for i, ply_file in enumerate(processed_files):
+            print(f"[E57] {i+1}/{len(processed_files)}: {ply_file.name}")
+
+            points, colors = load_points_from_ply(str(ply_file))
+
+            data = {
+                "cartesianX": points[:, 0],
+                "cartesianY": points[:, 1],
+                "cartesianZ": points[:, 2],
+            }
+
+            if colors is not None and len(colors) == len(points):
+                # pye57 ожидает uint8
+                data["colorRed"] = (colors[:, 0] * 255).astype(np.uint8)
+                data["colorGreen"] = (colors[:, 1] * 255).astype(np.uint8)
+                data["colorBlue"] = (colors[:, 2] * 255).astype(np.uint8)
+
+            rotation, translation = pose_data[i]
+            e57_out.write_scan_raw(
+                data,
+                rotation=rotation,
+                translation=translation,
+            )
+
+    print(f"E57 экспорт завершен: {output_file}")
+
+
 def remove_statistical_outliers(
     input_file: str,
     output_file: str,
@@ -572,12 +620,12 @@ def main():
     
     if multi_file_mode:
         # # Список E57 файлов (каждый = одна станция с 1+ сканами)
-        # e57_files = [
-        #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/init/E 3023 A5 init- Setup33.e57",
-        #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/init/E 3023 A5 init- Setup34.e57",
-        #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/init/E 3023 A5 init- Setup35.e57",
-        # ]
-        # file_name = "E_3023_A5_init"  # Название для output директории
+        e57_files = [
+            "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/init/E 3023 A5 init- Setup33.e57",
+            "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/init/E 3023 A5 init- Setup34.e57",
+            "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/init/E 3023 A5 init- Setup35.e57",
+        ]
+        file_name = "E_3023_A5_init"  # Название для output директории
         # # Список E57 файлов (каждый = одна станция с 1+ сканами)
         # e57_files = [
         #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/moved/E 3023 A5 moved- Setup36.e57",
@@ -586,12 +634,12 @@ def main():
         # ]
         # file_name = "E_3023_A5_moved"  # Название для output директории
         # Список E57 файлов (каждый = одна станция с 1+ сканами)
-        e57_files = [
-            "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/del/E 3023 A5 del- Setup39.e57",
-            "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/del/E 3023 A5 del- Setup40.e57",
-            "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/del/E 3023 A5 del- Setup41.e57",
-        ]
-        file_name = "E_3023_A5_del"  # Название для output директории
+        # e57_files = [
+        #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/del/E 3023 A5 del- Setup39.e57",
+        #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/del/E 3023 A5 del- Setup40.e57",
+        #     "/Volumes/wBorovetsNV/Skoltech_laba/E-3023-A5-cutted/e57/del/E 3023 A5 del- Setup41.e57",
+        # ]
+        # file_name = "E_3023_A5_del"  # Название для output директории
     else:
         # Один E57 файл со всеми станциями
         # e57_file = "/Users/nikolayborovets/Downloads/Bundle_001.e57"
@@ -608,7 +656,7 @@ def main():
     save_mode = "filtered"  # sphere | highlighted | filtered
 
     # Параметры для удаления статистических выбросов
-    remove_outliers = True  # True = удалять выбросы после регистрации
+    remove_outliers = False  # True = удалять выбросы после регистрации
     nb_neighbors = 20  # Количество соседей для анализа
     std_ratio = 2.0  # Порог стандартного отклонения
 
@@ -618,6 +666,7 @@ def main():
     final_output_downsampled = f"{output_dir}/final_registered_scans_filtered_downsampled_full.ply"  # Итоговый объединенный файл после переноса downsampled (без propagate)
     final_output_local = f"{output_dir}/final_registered_scans_original.ply"  # Итоговый объединенный файл оригиналов
     final_output_without_outliers = f"{output_dir}/final_registered_scans_filtered_full_shadow_points_{radius_search}_{threshold}_without_outliers_nb_{nb_neighbors}_std_{std_ratio}.ply"  # С удаленными выбросами
+    final_output_e57 = f"{output_dir}/final_registered_scans_filtered_full.e57"  # Итоговый e57 с позами
     
     filtered_pattern = "scan_*_filtered_full.ply"
     downsampled_filtered_pattern = "scan_*_ds*_filtered.ply"
@@ -714,22 +763,30 @@ def main():
         pattern=local_pattern,
     )
 
+    # Экспорт отфильтрованных (перенесенных) локальных сканов в .e57 с позами
+    export_scans_to_e57(
+        processed_dir=output_dir,
+        pose_file=pose_file,
+        pattern=filtered_pattern,
+        output_file=final_output_e57,
+    )
+
     print(f"Финальный файл отфильтрованных сканов: {final_output}")
 
-    # === ЭТАП 4: Удаление статистических выбросов ===
-    if remove_outliers:
-        print("\n=== ЭТАП 4: Удаление статистических выбросов ===")
+    # # === ЭТАП 4: Удаление статистических выбросов ===
+    # if remove_outliers:
+    #     print("\n=== ЭТАП 4: Удаление статистических выбросов ===")
         
-        # Удаление выбросов из отфильтрованного облака
-        remove_statistical_outliers(
-            input_file=final_output,
-            output_file=final_output_without_outliers,
-            nb_neighbors=nb_neighbors,
-            std_ratio=std_ratio,
-        )
+    #     # Удаление выбросов из отфильтрованного облака
+    #     remove_statistical_outliers(
+    #         input_file=final_output,
+    #         output_file=final_output_without_outliers,
+    #         nb_neighbors=nb_neighbors,
+    #         std_ratio=std_ratio,
+    #     )
         
-        print(f"\nФинальные файлы после удаления выбросов:")
-        print(f"  Отфильтрованные: {final_output_without_outliers}")
+    #     print(f"\nФинальные файлы после удаления выбросов:")
+    #     print(f"  Отфильтрованные: {final_output_without_outliers}")
 
 
 if __name__ == "__main__":
