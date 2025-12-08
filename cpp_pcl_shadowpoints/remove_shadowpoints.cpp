@@ -90,7 +90,8 @@ int main(int argc, char** argv) {
 
     // Сохраняем удаленные точки в отдельный файл
     pcl::IndicesConstPtr removed_indices = sp_filter.getRemovedIndices();
-    if (removed_indices && !removed_indices->empty()) {
+    const bool has_removed = removed_indices && !removed_indices->empty();
+    if (has_removed) {
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr removed_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::copyPointCloud(*cloud, *removed_indices, *removed_cloud);
 
@@ -111,17 +112,14 @@ int main(int argc, char** argv) {
                   << removed_filename << std::endl;
     }
 
-    if (save_mode == "highlighted" || save_mode == "sphere") {
+    if (has_removed && (save_mode == "highlighted" || save_mode == "sphere")) {
         // 4.5. Подсвечиваем удаленные точки красным цветом в оригинальном облаке
-        pcl::IndicesConstPtr removed_indices = sp_filter.getRemovedIndices();
-        if (removed_indices) {
-            for (const auto& idx : *removed_indices) {
-                (*cloud)[idx].r = 255; // Красный
-                (*cloud)[idx].g = 0;
-                (*cloud)[idx].b = 0;
-            }
-            std::cout << "Highlighted " << removed_indices->size() << " removed points in red." << std::endl;
+        for (const auto& idx : *removed_indices) {
+            (*cloud)[idx].r = 255; // Красный
+            (*cloud)[idx].g = 0;
+            (*cloud)[idx].b = 0;
         }
+        std::cout << "Highlighted " << removed_indices->size() << " removed points in red." << std::endl;
     }
 
     // 5. Добавляем большой красный шар (радиус 5 см = 0.05 м) в начало координат (0,0,0)

@@ -12,7 +12,6 @@ import numpy as np
 import open3d as o3d
 import pye57
 import json
-import os
 from typing import Tuple, Optional, List, Dict
 from pathlib import Path
 import subprocess
@@ -154,6 +153,24 @@ def load_points_from_ply(filename: str) -> Tuple[np.ndarray, Optional[np.ndarray
     return points, colors
 
 
+def voxel_downsample(points: np.ndarray, colors: Optional[np.ndarray], voxel_size: Optional[float], log_prefix: str = "") -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """Обертка для voxel_down_sample с логом; не меняет данные если voxel_size=None."""
+    if voxel_size is None:
+        return points, colors
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    if colors is not None:
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    pcd_downsampled = pcd.voxel_down_sample(voxel_size=voxel_size)
+    ds_points = np.asarray(pcd_downsampled.points)
+    ds_colors = np.asarray(pcd_downsampled.colors) if pcd_downsampled.has_colors() else None
+
+    print(f"{log_prefix}Downsampling: {len(points)} -> {len(ds_points)} точек")
+    return ds_points, ds_colors
+
+
 def propagate_shadow_removal_to_original(
     original_ply: str,
     removed_points_ply: str,
@@ -255,21 +272,7 @@ def prepare_scans_for_pcl_multi_file(e57_files: List[str], output_dir: str = "sc
             colors_original = np.copy(colors) if colors is not None else None
             original_point_count = len(points_original)
 
-            # Применяем downsampling если задан voxel_size
-            if downsample_voxel_size is not None:
-                pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(points_original)
-                if colors_original is not None:
-                    pcd.colors = o3d.utility.Vector3dVector(colors_original)
-
-                pcd_downsampled = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)
-                points = np.asarray(pcd_downsampled.points)
-                colors = np.asarray(pcd_downsampled.colors) if pcd_downsampled.has_colors() else None
-
-                print(f"    Downsampling: {original_point_count} -> {len(points)} точек")
-            else:
-                points = points_original
-                colors = colors_original
+            points, colors = voxel_downsample(points_original, colors_original, downsample_voxel_size, log_prefix="    ")
 
             original_ply_filename = f"{output_dir}/scan_{global_scan_index:03d}_original.ply"
             save_points_to_ply(points_original, colors_original, original_ply_filename)
@@ -343,21 +346,7 @@ def prepare_scans_for_pcl(e57_file: str, output_dir: str = "scans_for_pcl", down
         colors_original = np.copy(colors) if colors is not None else None
         original_point_count = len(points_original)
 
-        # Применяем downsampling если задан voxel_size
-        if downsample_voxel_size is not None:
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(points_original)
-            if colors_original is not None:
-                pcd.colors = o3d.utility.Vector3dVector(colors_original)
-
-            pcd_downsampled = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)
-            points = np.asarray(pcd_downsampled.points)
-            colors = np.asarray(pcd_downsampled.colors) if pcd_downsampled.has_colors() else None
-
-            print(f"  Downsampling: {original_point_count} -> {len(points)} точек")
-        else:
-            points = points_original
-            colors = colors_original
+        points, colors = voxel_downsample(points_original, colors_original, downsample_voxel_size, log_prefix="  ")
 
         original_ply_filename = f"{output_dir}/scan_{i:03d}_original.ply"
         save_points_to_ply(points_original, colors_original, original_ply_filename)
