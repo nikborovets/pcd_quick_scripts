@@ -5,6 +5,7 @@
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/filters/shadowpoints.h>
 #include <pcl/search/kdtree.h>
+#include <pcl/common/common.h>
 #include <chrono>
 
 int main(int argc, char** argv) {
@@ -86,6 +87,29 @@ int main(int argc, char** argv) {
     // Применяем фильтр
     sp_filter.filter(*cloud_filtered);
     std::cout << "ShadowPoints filter applied." << std::endl;
+
+    // Сохраняем удаленные точки в отдельный файл
+    pcl::IndicesConstPtr removed_indices = sp_filter.getRemovedIndices();
+    if (removed_indices && !removed_indices->empty()) {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr removed_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        pcl::copyPointCloud(*cloud, *removed_indices, *removed_cloud);
+
+        std::string removed_filename;
+        if (!output_path.empty()) {
+            size_t dot_pos = output_path.rfind('.');
+            if (dot_pos != std::string::npos) {
+                removed_filename = output_path.substr(0, dot_pos) + "_removed" + output_path.substr(dot_pos);
+            } else {
+                removed_filename = output_path + "_removed.ply";
+            }
+        } else {
+            removed_filename = "removed_shadowpoints.ply";
+        }
+
+        pcl::io::savePLYFileASCII(removed_filename, *removed_cloud);
+        std::cout << "Saved " << removed_cloud->size() << " removed shadow points to "
+                  << removed_filename << std::endl;
+    }
 
     if (save_mode == "highlighted" || save_mode == "sphere") {
         // 4.5. Подсвечиваем удаленные точки красным цветом в оригинальном облаке

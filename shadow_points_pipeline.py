@@ -154,6 +154,64 @@ def load_points_from_ply(filename: str) -> Tuple[np.ndarray, Optional[np.ndarray
     return points, colors
 
 
+def propagate_shadow_removal_to_original(
+    original_ply: str,
+    removed_points_ply: str,
+    output_ply: str,
+    search_radius: float,
+) -> None:
+    """
+    Переносит удаление shadow points с downsampled облака на оригинальное облако.
+
+    Args:
+        original_ply: путь к оригинальному (не downsampled) облаку
+        removed_points_ply: путь к файлу с удаленными shadow points (из C++)
+        output_ply: путь для сохранения результата
+        search_radius: радиус поиска соседей (рекомендуется voxel_size * 1.5)
+    """
+    print("Перенос удаления shadow points на оригинальное облако")
+    print(f"  Радиус поиска: {search_radius}")
+
+    pcd_original = o3d.io.read_point_cloud(original_ply)
+    pcd_removed = o3d.io.read_point_cloud(removed_points_ply)
+
+    original_count = len(pcd_original.points)
+    removed_count = len(pcd_removed.points)
+
+    print(f"  Оригинальное облако: {original_count} точек")
+    print(f"  Shadow points (downsampled): {removed_count} точек")
+
+    if removed_count == 0:
+        print("  Нет shadow points для удаления, сохраняем оригинал")
+        o3d.io.write_point_cloud(output_ply, pcd_original)
+        return
+
+    tree = o3d.geometry.KDTreeFlann(pcd_original)
+
+    indices_to_remove = set()
+    removed_points = np.asarray(pcd_removed.points)
+
+    for point in removed_points:
+        k, idx, _ = tree.search_radius_vector_3d(point, search_radius)
+        if k > 0:
+            indices_to_remove.update(idx)
+
+    if not indices_to_remove:
+        print("  Не найдено соответствий в оригинале, сохраняем оригинал")
+        o3d.io.write_point_cloud(output_ply, pcd_original)
+        return
+
+    all_indices = set(range(original_count))
+    indices_to_keep = list(all_indices - indices_to_remove)
+
+    pcd_filtered = pcd_original.select_by_index(indices_to_keep)
+    o3d.io.write_point_cloud(output_ply, pcd_filtered)
+
+    print(f"  Удалено точек: {len(indices_to_remove)}")
+    print(f"  Осталось точек: {len(pcd_filtered.points)}")
+    print(f"  Сохранено в: {output_ply}")
+
+
 def prepare_scans_for_pcl_multi_file(e57_files: List[str], output_dir: str = "scans_for_pcl", downsample_voxel_size: Optional[float] = None) -> str:
     """
     Подготавливает сканы из нескольких E57 файлов для обработки в PCL.
@@ -193,22 +251,30 @@ def prepare_scans_for_pcl_multi_file(e57_files: List[str], output_dir: str = "sc
             # Читаем скан без трансформации
             points, colors, rotation, translation = read_scan_with_pose(e57_path, local_scan_idx)
 
-            original_point_count = len(points)
+            points_original = np.copy(points)
+            colors_original = np.copy(colors) if colors is not None else None
+            original_point_count = len(points_original)
 
             # Применяем downsampling если задан voxel_size
             if downsample_voxel_size is not None:
                 pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(points)
-                if colors is not None:
-                    pcd.colors = o3d.utility.Vector3dVector(colors)
+                pcd.points = o3d.utility.Vector3dVector(points_original)
+                if colors_original is not None:
+                    pcd.colors = o3d.utility.Vector3dVector(colors_original)
 
                 pcd_downsampled = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)
                 points = np.asarray(pcd_downsampled.points)
                 colors = np.asarray(pcd_downsampled.colors) if pcd_downsampled.has_colors() else None
 
                 print(f"    Downsampling: {original_point_count} -> {len(points)} точек")
+            else:
+                points = points_original
+                colors = colors_original
 
-            # Имена файлов с глобальной нумерацией
+            original_ply_filename = f"{output_dir}/scan_{global_scan_index:03d}_original.ply"
+            save_points_to_ply(points_original, colors_original, original_ply_filename)
+
+            # Имена файлов с глобальной нумерацией для PCL (downsampled или оригинал)
             if downsample_voxel_size is not None:
                 ply_filename = f"{output_dir}/scan_{global_scan_index:03d}_ds{downsample_voxel_size}_local.ply"
             else:
@@ -273,20 +339,28 @@ def prepare_scans_for_pcl(e57_file: str, output_dir: str = "scans_for_pcl", down
         # Читаем скан без трансформации
         points, colors, rotation, translation = read_scan_with_pose(e57_file, i)
 
-        original_point_count = len(points)
+        points_original = np.copy(points)
+        colors_original = np.copy(colors) if colors is not None else None
+        original_point_count = len(points_original)
 
         # Применяем downsampling если задан voxel_size
         if downsample_voxel_size is not None:
             pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(points)
-            if colors is not None:
-                pcd.colors = o3d.utility.Vector3dVector(colors)
+            pcd.points = o3d.utility.Vector3dVector(points_original)
+            if colors_original is not None:
+                pcd.colors = o3d.utility.Vector3dVector(colors_original)
 
             pcd_downsampled = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)
             points = np.asarray(pcd_downsampled.points)
             colors = np.asarray(pcd_downsampled.colors) if pcd_downsampled.has_colors() else None
 
             print(f"  Downsampling: {original_point_count} -> {len(points)} точек")
+        else:
+            points = points_original
+            colors = colors_original
+
+        original_ply_filename = f"{output_dir}/scan_{i:03d}_original.ply"
+        save_points_to_ply(points_original, colors_original, original_ply_filename)
 
         # Имена файлов: scan_XXX_ds{voxel}_local.ply или scan_XXX_local.ply
         if downsample_voxel_size is not None:
@@ -313,7 +387,7 @@ def prepare_scans_for_pcl(e57_file: str, output_dir: str = "scans_for_pcl", down
     return pose_file
 
 
-def register_processed_scans(processed_dir: str, pose_file: str, output_file: str = "final_registered_scans.ply", voxel_size: float = 0.02, pattern: str = "scan_*_filtered.ply") -> None:
+def register_processed_scans(processed_dir: str, pose_file: str, output_file: str = "final_registered_scans.ply", voxel_size: float | None = None, pattern: str = "scan_*_filtered.ply") -> None:
     """
     Регистрирует обработанные в PCL сканы в общую систему координат.
     Ожидает файлы вида {pattern}.
@@ -551,12 +625,14 @@ def main():
 
     output_dir = f"shadowpoints_output/{file_name}_scans_for_pcl_{radius_search}_{threshold}_voxel_{downsample_voxel_size}_{save_mode}"  # Директория для промежуточных и итоговых файлов (можно сделать абсолютной)
 
-    final_output = f"{output_dir}/final_registered_scans_{save_mode}.ply"  # Итоговый объединенный файл
-    final_output_local = f"{output_dir}/final_registered_scans_original.ply"  # Итоговый объединенный файл
-    final_output_without_outliers = f"{output_dir}/final_registered_scans_{save_mode}_shadow_points_{radius_search}_{threshold}_without_outliers_nb_{nb_neighbors}_std_{std_ratio}.ply"  # С удаленными выбросами
+    final_output = f"{output_dir}/final_registered_scans_filtered_full.ply"  # Итоговый объединенный файл после переноса (с propagate)
+    final_output_downsampled = f"{output_dir}/final_registered_scans_filtered_downsampled_full.ply"  # Итоговый объединенный файл после переноса downsampled (без propagate)
+    final_output_local = f"{output_dir}/final_registered_scans_original.ply"  # Итоговый объединенный файл оригиналов
+    final_output_without_outliers = f"{output_dir}/final_registered_scans_filtered_full_shadow_points_{radius_search}_{threshold}_without_outliers_nb_{nb_neighbors}_std_{std_ratio}.ply"  # С удаленными выбросами
     
-    filtered_pattern = "scan_*_filtered.ply"
-    local_pattern = "scan_*_local.ply"
+    filtered_pattern = "scan_*_filtered_full.ply"
+    downsampled_filtered_pattern = "scan_*_ds*_filtered.ply"
+    local_pattern = "scan_*_original.ply"
 
     final_voxel_size = 0.01  # Воксель для финального downsampling (можно None, если не нужен)
     
@@ -590,13 +666,55 @@ def main():
         save_mode=save_mode,
     )
 
+    # === ЭТАП 2.5: Перенос удаления shadow points на оригинальные облака ===
+    print("\n=== ЭТАП 2.5: Перенос удаления на оригинальные облака ===")
+    removed_files = sorted(Path(output_dir).glob("scan_*_filtered_removed.ply"))
+    if not removed_files:
+        removed_files = sorted(Path(output_dir).glob("scan_*_removed.ply"))
+
+    if not removed_files:
+        print("  Файлы *_filtered_removed.ply не найдены, этап пропущен")
+    else:
+        search_radius = (downsample_voxel_size * 1.5) if downsample_voxel_size is not None else radius_search
+        for removed_file in removed_files:
+            stem_parts = removed_file.stem.split("_")
+            if len(stem_parts) < 2:
+                print(f"  Пропуск файла {removed_file.name}: не удалось извлечь индекс скана")
+                continue
+            try:
+                scan_idx = int(stem_parts[1])
+            except ValueError:
+                print(f"  Пропуск файла {removed_file.name}: некорректный индекс скана")
+                continue
+
+            original_file = Path(output_dir) / f"scan_{scan_idx:03d}_original.ply"
+            output_file = Path(output_dir) / f"scan_{scan_idx:03d}_filtered_full.ply"
+
+            if not original_file.is_file():
+                print(f"  Оригинал не найден для scan {scan_idx:03d}: {original_file.name}, пропуск")
+                continue
+
+            propagate_shadow_removal_to_original(
+                original_ply=str(original_file),
+                removed_points_ply=str(removed_file),
+                output_ply=str(output_file),
+                search_radius=search_radius,
+            )
+
     print("\n=== ЭТАП 3: Регистрация отфильтрованных сканов ===")
     register_processed_scans(
         processed_dir=output_dir,
         pose_file=pose_file,
         output_file=final_output,
-        voxel_size=final_voxel_size,
+        # voxel_size=final_voxel_size,
         pattern=filtered_pattern,
+    )
+    register_processed_scans(
+        processed_dir=output_dir,
+        pose_file=pose_file,
+        output_file=final_output_downsampled,
+        # voxel_size=final_voxel_size,
+        pattern=downsampled_filtered_pattern,
     )
     # Регистрация оригинальных сканов
     register_processed_scans(
