@@ -321,15 +321,26 @@ def create_rotation_gif_camera(
 #     frame_size=0.1,
 #     elev_deg=45.0,
 # )
+# create_rotation_gif_camera(
+#     ply_path="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/vis_data/07-11/lab_scan_ds.pcd",
+#     output_gif="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/gifs/07-11_cam.gif",
+#     center_shift=(0.0, 0.0, -1.5),
+#     zoom=0.25,
+#     traj_path="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/vis_data/07-11/trajectory_leica.txt",
+#     fps=15,
+#     total_frames=120,
+#     frame_size=0.1,
+#     elev_deg=32.0,
+# )
 create_rotation_gif_camera(
-    ply_path="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/vis_data/07-11/lab_scan_ds.pcd",
-    output_gif="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/gifs/07-11_cam.gif",
+    ply_path="/Users/nikolayborovets/Downloads/segmentation_loc1.pcd",
+    output_gif="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/gifs/segmentation_loc1_3.gif",
+    # window_size=(1280, 720),
+    window_size=(640, 480),
     center_shift=(0.0, 0.0, -1.5),
-    zoom=0.25,
-    traj_path="/Users/nikolayborovets/Desktop/skoltech/pcd_quick_scripts/vis_data/07-11/trajectory_leica.txt",
-    fps=15,
+    zoom=0.35,
+    fps=16,
     total_frames=120,
-    frame_size=0.1,
     elev_deg=32.0,
 )
 

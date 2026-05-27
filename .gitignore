@@ -21,3 +21,4 @@ shadowpoints_output/
 trajectory_*.txt
 *.pcd
 *.gif
+gifs/
